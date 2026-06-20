@@ -43,6 +43,7 @@ class Essay(Base):
 
     # 结果
     recognized_text = Column(Text, nullable=True)
+    ocr_words = Column(JSON, nullable=True)  # OCR 识别的文字位置信息
     total_score = Column(Integer, nullable=True)
     dimension_scores = Column(JSON, nullable=True)
     comments = Column(JSON, nullable=True)

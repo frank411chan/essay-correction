@@ -13,6 +13,7 @@ from app.schemas import (
     EssayResponse,
     EssayStatusResponse,
 )
+from app.services.annotation_service import generate_annotated_image
 from app.services.file_service import get_image_path, save_upload_file
 from app.services.llm_service import correct_text
 from app.services.ocr import get_ocr_provider
@@ -84,7 +85,16 @@ async def _do_correct(essay_id: int, task_id: str, db: Session):
 
         # OCR 识别
         ocr_provider = get_ocr_provider(essay.ocr_engine)
-        recognized_text = await ocr_provider.recognize(essay.image_path)
+        ocr_result = await ocr_provider.recognize(essay.image_path)
+        recognized_text = ocr_result.text
+
+        # 保存 OCR 位置信息
+        if ocr_result.words:
+            essay.ocr_words = [
+                {"text": w.text, "location": w.location} for w in ocr_result.words
+            ]
+        else:
+            essay.ocr_words = []
 
         task_manager.update_task(task_id, "processing", "正在进行作文批改...")
 
@@ -172,6 +182,26 @@ async def get_essay_image(essay_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="图片文件不存在")
 
     return FileResponse(path)
+
+
+@router.get("/{essay_id}/annotated-image")
+async def get_essay_annotated_image(essay_id: int, db: Session = Depends(get_db)):
+    """获取带批注高亮的作文图片。"""
+    essay = db.query(Essay).filter(Essay.id == essay_id).first()
+    if not essay:
+        raise HTTPException(status_code=404, detail="作文记录不存在")
+
+    if essay.status != "done":
+        raise HTTPException(status_code=400, detail="作文尚未批改完成，无法生成批注图")
+
+    try:
+        image_bytes = generate_annotated_image(essay)
+        return StreamingResponse(
+            iter([image_bytes]),
+            media_type="image/jpeg",
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"批注图生成失败: {str(e)}")
 
 
 @router.get("/{essay_id}/pdf")

@@ -15,10 +15,13 @@
 1. **学生管理**：新增、修改、删除、查询学生
 2. **单篇批改**：上传图片 → 选择学生/OCR 引擎/文体 → 异步批改 → 查看结果
 3. **批量批改**：扫描指定日期目录，按 `人名_作文题目.jpg` 规则自动识别并批改
-4. **OCR 引擎**：可选择 Kimi 视觉识别、百度手写 OCR、腾讯手写 OCR
-5. **文体模板**：记叙文、议论文、说明文、散文
-6. **PDF 导出**：导出完整批改报告
-7. **历史查询**：按学生姓名、作文标题、日期、状态查询
+4. **定时自动扫描**：每天指定时间自动扫描当天目录
+5. **OCR 引擎**：可选择 Kimi 视觉识别、百度手写 OCR、腾讯手写 OCR
+6. **文体模板**：记叙文、议论文、说明文、散文
+7. **智能评分**：根据作文实际质量动态评分，不再是固定分数
+8. **原图批注高亮**：在作文原图上绘制段落批注框（需 OCR 引擎返回位置信息）
+9. **PDF 导出**：导出完整批改报告
+10. **历史查询**：按学生姓名、作文标题、日期、状态查询
 
 ## 目录结构
 
@@ -74,6 +77,10 @@ TENCENT_OCR_SECRET_KEY=你的SecretKey
 
 # 批量批改目录
 BATCH_SCAN_DIR=/mnt/hgfs/vm_share/workspace/essay-correction
+
+# 定时自动扫描配置
+AUTO_SCAN_ENABLED=true
+AUTO_SCAN_TIME=22:00
 ```
 
 > `.env` 文件已加入 `.gitignore`，请勿提交到 Git。
@@ -208,11 +215,23 @@ POST https://aip.baidubce.com/rest/2.0/ocr/v1/handwriting?access_token=xxx
 | POST | `/api/essays/{id}/correct` | 触发异步批改 |
 | GET | `/api/essays/{id}/status` | 查询批改状态 |
 | GET | `/api/essays/{id}` | 获取批改详情 |
+| GET | `/api/essays/{id}/annotated-image` | 获取原图批注高亮图片 |
 | GET | `/api/essays/{id}/pdf` | 导出 PDF 报告 |
 | GET | `/api/essays` | 历史记录列表 |
 | POST | `/api/batch/scan?date=YYYYMMDD` | 扫描指定日期目录 |
 | POST | `/api/batch/today` | 扫描当天目录 |
 | GET | `/api/batch/tasks/{task_id}` | 查询批量任务进度 |
+
+## 定时自动扫描
+
+后端启动后会根据 `.env` 配置自动启用定时任务：
+
+```env
+AUTO_SCAN_ENABLED=true
+AUTO_SCAN_TIME=22:00
+```
+
+每天 `22:00` 会自动扫描 `BATCH_SCAN_DIR/YYYYMMDD/` 目录，对当天放入的作文图片进行自动批改。
 
 ## 注意事项
 
@@ -225,6 +244,6 @@ POST https://aip.baidubce.com/rest/2.0/ocr/v1/handwriting?access_token=xxx
 ## 后续优化方向
 
 1. 接入更多 OCR 引擎
-2. 支持作文原图批注高亮
-3. 定时自动扫描当天目录
-4. 多用户登录与权限管理
+2. 优化原图批注高亮算法，支持句子/词语级精确定位
+3. 多用户登录与权限管理
+4. 批改结果导出 Word 报告

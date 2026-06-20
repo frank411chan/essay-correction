@@ -6,7 +6,7 @@ from pathlib import Path
 from urllib.request import Request, urlopen
 
 from app.config import get_settings
-from app.services.ocr.base import OCRProvider
+from app.services.ocr.base import OCRProvider, OcrResult
 
 
 class TencentOCRProvider(OCRProvider):
@@ -44,7 +44,7 @@ class TencentOCRProvider(OCRProvider):
 
         return headers
 
-    async def recognize(self, image_path: str) -> str:
+    async def recognize(self, image_path: str) -> OcrResult:
         if not self.secret_id or not self.secret_key:
             raise ValueError("腾讯 OCR 未配置 Secret ID 和 Secret Key")
 
@@ -66,4 +66,4 @@ class TencentOCRProvider(OCRProvider):
             raise RuntimeError(f"腾讯 OCR 错误: {result['Response']['Error']}")
 
         # 简化的结果解析，实际需按腾讯云响应结构解析
-        return "腾讯 OCR 结果占位，需完善签名和解析逻辑"
+        return OcrResult(text="腾讯 OCR 结果占位，需完善签名和解析逻辑", words=[])

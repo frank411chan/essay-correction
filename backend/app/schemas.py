@@ -90,6 +90,7 @@ class EssayResponse(EssayBase):
     status: str
     error_message: Optional[str] = None
     recognized_text: Optional[str] = None
+    ocr_words: Optional[List[Dict[str, Any]]] = None
     total_score: Optional[int] = None
     dimension_scores: Optional[Dict[str, Any]] = None
     comments: Optional[Dict[str, Any]] = None

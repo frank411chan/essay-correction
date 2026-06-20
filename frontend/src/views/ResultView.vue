@@ -26,7 +26,22 @@
             <el-icon><Download /></el-icon>
             导出 PDF 报告
           </el-button>
+          <el-button @click="showAnnotated = !showAnnotated">
+            {{ showAnnotated ? '隐藏原图批注' : '显示原图批注' }}
+          </el-button>
         </div>
+      </div>
+
+      <div v-if="showAnnotated" class="card">
+        <div class="card-title">原图批注高亮</div>
+        <p style="color: #909399; font-size: 12px; margin-bottom: 10px">
+          注：仅百度/腾讯 OCR 引擎返回文字位置时才能绘制高亮框
+        </p>
+        <el-image
+          :src="annotatedImageUrl"
+          fit="contain"
+          style="width: 100%; max-height: 600px; border-radius: 4px"
+        />
       </div>
 
       <ResultPanel :essay="essay" />
@@ -40,15 +55,21 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import ResultPanel from '../components/ResultPanel.vue'
-import { getEssay, getEssayPdfUrl } from '../api/essay'
+import { getEssay, getEssayPdfUrl, getEssayAnnotatedImageUrl } from '../api/essay'
 
 const route = useRoute()
 const essay = ref(null)
 const loading = ref(true)
+const showAnnotated = ref(false)
+
+const annotatedImageUrl = computed(() => {
+  if (!essay.value) return ''
+  return getEssayAnnotatedImageUrl(essay.value.id)
+})
 
 const genreMap = {
   narrative: '记叙文',

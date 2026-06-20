@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from app.services.ocr.base import OCRProvider
+from app.services.ocr.base import OCRProvider, OcrResult, OcrWord
 from app.services.ocr.kimi_ocr import KimiOCRProvider
 from app.services.ocr.baidu_ocr import BaiduOCRProvider
 from app.services.ocr.tencent_ocr import TencentOCRProvider

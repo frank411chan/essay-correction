@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     # 批量扫描目录
     batch_scan_dir: str = "/mnt/hgfs/vm_share/workspace/essay-correction"
 
+    # 定时扫描配置
+    auto_scan_enabled: bool = True
+    auto_scan_time: str = "22:00"  # 每天 22:00 自动扫描当天目录
+
     @property
     def upload_dir_path(self) -> Path:
         return PROJECT_ROOT / self.upload_dir

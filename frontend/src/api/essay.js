@@ -31,6 +31,10 @@ export function getEssayImageUrl(id) {
   return `/api/essays/${id}/image`
 }
 
+export function getEssayAnnotatedImageUrl(id) {
+  return `/api/essays/${id}/annotated-image`
+}
+
 export function getEssayPdfUrl(id) {
   return `/api/essays/${id}/pdf`
 }

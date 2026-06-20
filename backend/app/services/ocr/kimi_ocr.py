@@ -2,7 +2,7 @@
 from openai import OpenAI
 
 from app.config import get_settings
-from app.services.ocr.base import OCRProvider
+from app.services.ocr.base import OCRProvider, OcrResult
 from app.services.file_service import image_to_base64
 
 
@@ -17,7 +17,7 @@ class KimiOCRProvider(OCRProvider):
         )
         self.model = settings.moonshot_model
 
-    async def recognize(self, image_path: str) -> str:
+    async def recognize(self, image_path: str) -> OcrResult:
         image_base64 = image_to_base64(image_path)
 
         response = self.client.chat.completions.create(
@@ -54,4 +54,5 @@ class KimiOCRProvider(OCRProvider):
             if lines and lines[-1].strip() == "```":
                 lines = lines[:-1]
             text = "\n".join(lines).strip()
-        return text
+        # Kimi 不提供位置信息
+        return OcrResult(text=text, words=[])

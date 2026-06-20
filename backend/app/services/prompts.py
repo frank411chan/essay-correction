@@ -71,15 +71,22 @@ def build_correction_prompt(
 {recognized_text}
 ===
 
+评分标准：
+- 优秀（90-100）：中心突出、结构完整、语言流畅、书写工整
+- 良好（80-89）：中心明确、结构较完整、语言较流畅、书写较工整
+- 中等（70-79）：中心基本明确、结构基本完整、语言基本通顺、书写一般
+- 及格（60-69）：中心不够明确、结构不够完整、语言不够通顺、书写较差
+- 不及格（0-59）：偏离题意、结构混乱、语句不通、书写潦草
+
 请严格按照以下 JSON 格式返回，不要包含任何其他内容：
 {{
   "recognized_text": "",
-  "total_score": 85,
+  "total_score": 0,
   "dimension_scores": {{
-    "content": 28,
-    "structure": 18,
-    "language": 22,
-    "writing": 17
+    "content": 0,
+    "structure": 0,
+    "language": 0,
+    "writing": 0
   }},
   "comments": {{
     "overall": "总体评语",
@@ -99,8 +106,10 @@ def build_correction_prompt(
 }}
 
 注意：
-- total_score 满分 100
+- total_score 必须是 0-100 之间的整数，根据作文实际质量评分，严禁固定给 85
 - content 满分 30，structure 满分 20，language 满分 25，writing 满分 25
+- 四个维度得分之和应等于 total_score
+- 请根据作文实际质量严格评分，不能千篇一侓
 - recognized_text 字段留空即可，系统会自动填入原文
 - 所有字段必须存在，如果没有内容请使用空字符串或空数组
 - 只返回 JSON，不要包含 markdown 代码块标记

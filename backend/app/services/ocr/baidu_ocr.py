@@ -6,7 +6,7 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from app.config import get_settings
-from app.services.ocr.base import OCRProvider
+from app.services.ocr.base import OCRProvider, OcrResult, OcrWord
 
 
 class BaiduOCRProvider(OCRProvider):
@@ -39,7 +39,7 @@ class BaiduOCRProvider(OCRProvider):
         self.access_token = result["access_token"]
         return self.access_token
 
-    async def recognize(self, image_path: str) -> str:
+    async def recognize(self, image_path: str) -> OcrResult:
         if not self.api_key or not self.secret_key:
             raise ValueError("百度 OCR 未配置 API Key 和 Secret Key")
 
@@ -60,4 +60,16 @@ class BaiduOCRProvider(OCRProvider):
             raise RuntimeError(f"百度 OCR 错误: {result.get('error_msg')}")
 
         words_result = result.get("words_result", [])
-        return "\n".join([item.get("words", "") for item in words_result])
+        words = []
+        text_lines = []
+
+        for item in words_result:
+            word_text = item.get("words", "").strip()
+            if not word_text:
+                continue
+            location = item.get("location", {})
+            words.append(OcrWord(text=word_text, location=location))
+            text_lines.append(word_text)
+
+        # 手写识别按行返回，这里用换行拼接
+        return OcrResult(text="\n".join(text_lines), words=words)
