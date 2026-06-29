@@ -36,7 +36,8 @@
       </el-form-item>
 
       <el-form-item label="文体模板">
-        <el-select v-model="form.genre" placeholder="请选择文体" style="width: 100%">
+        <el-select v-model="form.genre" placeholder="不选择则按通用要求批改" clearable style="width: 100%">
+          <el-option label="不选择" value="" />
           <el-option label="记叙文" value="narrative" />
           <el-option label="议论文" value="argumentation" />
           <el-option label="说明文" value="description" />
@@ -51,7 +52,9 @@
           action="#"
           :auto-upload="false"
           :on-change="handleChange"
-          :limit="1"
+          :on-remove="handleRemove"
+          :limit="3"
+          multiple
           accept=".jpg,.jpeg,.png,.webp"
         >
           <el-icon class="el-icon--upload"><upload-filled /></el-icon>
@@ -60,7 +63,7 @@
           </div>
           <template #tip>
             <div class="el-upload__tip">
-              支持 jpg/png/webp 格式，单张不超过 10MB
+              支持 jpg/png/webp 格式，最多3张，每张不超过10MB。批量命名规则：姓名_题目_序号.jpg
             </div>
           </template>
         </el-upload>
@@ -71,7 +74,7 @@
           type="primary"
           size="large"
           :loading="loading"
-          :disabled="!form.file || !form.student_id"
+          :disabled="!form.files.length || !form.student_id"
           @click="submit"
           style="width: 100%"
         >
@@ -103,8 +106,8 @@ const form = reactive({
   title: '',
   grade: '初中',
   ocr_engine: 'kimi',
-  genre: 'narrative',
-  file: null,
+  genre: '',
+  files: [],
 })
 
 const studentOptions = computed(() => {
@@ -114,8 +117,12 @@ const studentOptions = computed(() => {
   }))
 })
 
-function handleChange(file) {
-  form.file = file.raw
+function handleChange(file, fileList) {
+  form.files = fileList.map((f) => f.raw)
+}
+
+function handleRemove(file, fileList) {
+  form.files = fileList.map((f) => f.raw)
 }
 
 function submit() {

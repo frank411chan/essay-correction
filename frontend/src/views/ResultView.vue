@@ -21,6 +21,9 @@
           <el-descriptions-item label="OCR 引擎">{{ essay.ocr_engine }}</el-descriptions-item>
           <el-descriptions-item label="文体">{{ genreText(essay.genre) }}</el-descriptions-item>
         </el-descriptions>
+        <div v-if="essay.general_requirements" class="general-requirements">
+          <strong>通用批改要求：</strong>{{ essay.general_requirements }}
+        </div>
         <div style="margin-top: 16px">
           <el-button type="primary" @click="downloadPdf">
             <el-icon><Download /></el-icon>
@@ -44,7 +47,7 @@
         />
       </div>
 
-      <ResultPanel :essay="essay" />
+      <ResultPanel :essay="essay" @refresh="fetchEssay" />
     </template>
 
     <div v-else class="card" style="text-align: center">
@@ -79,7 +82,7 @@ const genreMap = {
 }
 
 function genreText(genre) {
-  return genreMap[genre] || genre
+  return genreMap[genre] || (genre ? genre : '未指定')
 }
 
 function downloadPdf() {
@@ -101,3 +104,15 @@ async function fetchEssay() {
 
 onMounted(fetchEssay)
 </script>
+
+<style scoped>
+.general-requirements {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: #f5f7fa;
+  border-radius: 4px;
+  font-size: 13px;
+  color: #606266;
+  line-height: 1.6;
+}
+</style>

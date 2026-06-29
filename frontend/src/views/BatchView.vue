@@ -19,7 +19,8 @@
           </el-select>
         </el-form-item>
         <el-form-item label="文体">
-          <el-select v-model="form.genre" style="width: 150px">
+          <el-select v-model="form.genre" clearable placeholder="不选择" style="width: 150px">
+            <el-option label="不选择" value="" />
             <el-option label="记叙文" value="narrative" />
             <el-option label="议论文" value="argumentation" />
             <el-option label="说明文" value="description" />
@@ -37,7 +38,7 @@
         title="文件命名规则"
         type="info"
         :closable="false"
-        description="图片文件名格式：人名_作文题目.jpg，例如：张三_我的家乡.jpg。扫描目录：/mnt/hgfs/vm_share/workspace/essay-correction/YYYYMMDD/"
+        description="单张图片：人名_作文题目.jpg，例如：张三_我的家乡.jpg。多张图片：人名_作文题目_序号.jpg，例如：张三_我的家乡_1.jpg、张三_我的家乡_2.jpg，同一姓名题目下最多3张，按序号从小到大组成一篇文章。扫描目录：/mnt/hgfs/vm_share/workspace/essay-correction/YYYYMMDD/"
       />
     </div>
 
@@ -65,7 +66,7 @@ import { scanBatch, getBatchTask } from '../api/essay'
 const form = reactive({
   date: new Date().toISOString().slice(0, 10).replace(/-/g, ''),
   ocr_engine: 'kimi',
-  genre: 'narrative',
+  genre: '',
 })
 
 const scanning = ref(false)
@@ -123,7 +124,7 @@ async function handleScan() {
 
   scanning.value = true
   try {
-    const res = await scanBatch(form.date, form.ocr_engine, form.genre, true)
+    const res = await scanBatch(form.date, form.ocr_engine, form.genre || null, true)
     const data = res.data
     task.task_id = data.task_id
     task.status = data.status

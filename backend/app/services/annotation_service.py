@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """生成带批注高亮的作文图片。"""
 import io
+import math
 import random
 from pathlib import Path
 
@@ -77,11 +78,126 @@ def _match_words_to_paragraph(words: list, paragraph_text: str) -> list:
     return matched
 
 
+def _char_in_word_offset(word_text: str, char: str) -> int:
+    """返回字符在 word_text 中的索引，-1 表示未找到。"""
+    # 优先匹配完整错误字/词；如果 wrong 是词，取首字位置
+    idx = word_text.find(char)
+    if idx >= 0:
+        return idx
+    # 若 wrong 为单个字，尝试在词中逐字匹配
+    if len(char) == 1:
+        for i, c in enumerate(word_text):
+            if c == char:
+                return i
+    return -1
+
+
+def _draw_typo_annotations(draw: ImageDraw.Draw, ocr_words: list, paragraph_reviews: list, font: ImageFont.FreeTypeFont):
+    """在原图上圈出错别字，并在右上方用圆圈标注正确字。"""
+    if not ocr_words or not paragraph_reviews:
+        return
+
+    # 收集所有错别字
+    typos = []
+    for review in paragraph_reviews:
+        for item in review.get("typos", []):
+            wrong = item.get("wrong", "").strip()
+            correct = item.get("correct", "").strip()
+            if wrong and correct:
+                typos.append((wrong, correct))
+
+    if not typos:
+        return
+
+    red = (255, 0, 0)
+    blue = (0, 0, 255)
+    used_indices = set()
+
+    for wrong, correct in typos:
+        # 优先匹配包含错误字的 OCR word
+        best_match = None
+        best_offset = -1
+        for idx, word_info in enumerate(ocr_words):
+            if idx in used_indices:
+                continue
+            word_text = word_info.get("text", "")
+            offset = _char_in_word_offset(word_text, wrong)
+            if offset >= 0:
+                best_match = word_info
+                best_offset = offset
+                used_indices.add(idx)
+                break
+
+        if not best_match:
+            continue
+
+        loc = best_match.get("location", {})
+        left = loc.get("left", 0)
+        top = loc.get("top", 0)
+        width = loc.get("width", 0)
+        height = loc.get("height", 0)
+        word_text = best_match.get("text", "")
+
+        if width <= 0 or height <= 0:
+            continue
+
+        # 估算错字在 word 内的位置
+        char_count = max(len(word_text), 1)
+        char_width = width / char_count
+        char_x = left + best_offset * char_width
+        char_y = top
+        char_w = min(char_width * len(wrong), width - best_offset * char_width)
+        char_h = height
+
+        # 画红色椭圆圈出错字（稍微放大一点，便于看清）
+        padding = 2
+        ellipse_box = [
+            char_x - padding,
+            char_y - padding,
+            char_x + char_w + padding,
+            char_y + char_h + padding,
+        ]
+        draw.ellipse(ellipse_box, outline=red, width=2)
+
+        # 在错字右上方画小圆圈并写正确字
+        try:
+            corr_font = _get_font(max(int(height * 0.6), 14))
+        except Exception:
+            corr_font = font
+
+        bbox = draw.textbbox((0, 0), correct, font=corr_font)
+        corr_w = bbox[2] - bbox[0]
+        corr_h = bbox[3] - bbox[1]
+
+        # 圆圈位置：错字右上方
+        circle_x = char_x + char_w + 4
+        circle_y = char_y - corr_h - 4
+        # 防止越界（简单处理，不越界顶部则上移）
+        if circle_y < 0:
+            circle_y = char_y + char_h + 4
+
+        circle_r = max(corr_w, corr_h) // 2 + 4
+        circle_center = (circle_x + circle_r, circle_y + circle_r)
+        draw.ellipse(
+            [circle_center[0] - circle_r, circle_center[1] - circle_r,
+             circle_center[0] + circle_r, circle_center[1] + circle_r],
+            outline=blue,
+            width=2,
+        )
+        draw.text(
+            (circle_center[0] - corr_w // 2, circle_center[1] - corr_h // 2),
+            correct,
+            fill=blue,
+            font=corr_font,
+        )
+
+
 def generate_annotated_image(essay) -> bytes:
-    """在作文原图上绘制段落批注高亮框。"""
-    image_path = PROJECT_ROOT / essay.image_path
+    """在作文原图上绘制段落批注高亮框与错别字圈注。多图时取第一张。"""
+    first_image = essay.image_paths[0] if essay.image_paths else essay.image_path
+    image_path = PROJECT_ROOT / first_image
     if not image_path.exists():
-        raise FileNotFoundError(f"图片不存在: {essay.image_path}")
+        raise FileNotFoundError(f"图片不存在: {first_image}")
 
     img = Image.open(image_path)
     if img.mode != "RGB":
@@ -90,8 +206,14 @@ def generate_annotated_image(essay) -> bytes:
     draw = ImageDraw.Draw(img)
     ocr_words = essay.ocr_words or []
     paragraph_comments = essay.paragraph_comments or []
+    paragraph_reviews = essay.paragraph_reviews or []
 
     colors = _generate_colors(len(paragraph_comments))
+
+    try:
+        font = _get_font(20)
+    except Exception:
+        font = ImageFont.load_default()
 
     for idx, comment_item in enumerate(paragraph_comments):
         comment = comment_item.get("comment", "")
@@ -137,28 +259,31 @@ def generate_annotated_image(essay) -> bytes:
             label = f"[{idx + 1}]"
 
             try:
-                font = _get_font(20)
+                label_font = _get_font(20)
             except Exception:
-                font = ImageFont.load_default()
+                label_font = ImageFont.load_default()
 
             # 画小圆角背景
-            bbox = draw.textbbox((0, 0), label, font=font)
+            bbox = draw.textbbox((0, 0), label, font=label_font)
             text_w = bbox[2] - bbox[0]
             text_h = bbox[3] - bbox[1]
             draw.rectangle(
                 [label_x, label_y, label_x + text_w + 8, label_y + text_h + 4],
                 fill=color,
             )
-            draw.text((label_x + 4, label_y), label, fill=(255, 255, 255), font=font)
+            draw.text((label_x + 4, label_y), label, fill=(255, 255, 255), font=label_font)
+
+    # 错别字圈注
+    _draw_typo_annotations(draw, ocr_words, paragraph_reviews, font)
 
     # 如果没有任何 OCR 位置信息，在图片底部添加提示
     if not ocr_words and paragraph_comments:
         try:
-            font = _get_font(16)
+            hint_font = _get_font(16)
         except Exception:
-            font = ImageFont.load_default()
+            hint_font = ImageFont.load_default()
         msg = "提示：当前 OCR 引擎未返回文字位置，无法在原图上绘制批注框。"
-        draw.text((10, img.height - 30), msg, fill=(255, 0, 0), font=font)
+        draw.text((10, img.height - 30), msg, fill=(255, 0, 0), font=hint_font)
 
     output = io.BytesIO()
     img.save(output, format="JPEG", quality=95)

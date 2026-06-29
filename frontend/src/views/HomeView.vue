@@ -58,16 +58,26 @@ async function handleSubmit(form) {
     ElMessage.warning('请先选择学生')
     return
   }
+  if (!form.files || form.files.length === 0) {
+    ElMessage.warning('请上传至少一张作文图片')
+    return
+  }
+  if (form.files.length > 3) {
+    ElMessage.warning('最多上传3张图片')
+    return
+  }
 
   loading.value = true
   try {
     const formData = new FormData()
-    formData.append('file', form.file)
+    form.files.forEach((file) => {
+      formData.append('files', file)
+    })
     if (form.title) formData.append('title', form.title)
     formData.append('grade', form.grade)
     formData.append('student_id', form.student_id)
     formData.append('ocr_engine', form.ocr_engine)
-    formData.append('genre', form.genre)
+    if (form.genre) formData.append('genre', form.genre)
 
     // 上传图片
     const uploadRes = await uploadEssay(formData)

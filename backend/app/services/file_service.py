@@ -13,6 +13,9 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+MAX_IMAGE_DIMENSION = 2048  # 手写文字识别需要较高分辨率
+JPEG_QUALITY = 95  # 手写文字需要更高质量，避免模糊
+MAX_UPLOAD_FILES = 3
 
 
 def validate_image(file: UploadFile) -> str:
@@ -25,7 +28,7 @@ def validate_image(file: UploadFile) -> str:
     return ext
 
 
-def compress_image(content: bytes, max_size: tuple = (1600, 1600), quality: int = 85) -> bytes:
+def compress_image(content: bytes, max_size: tuple = (MAX_IMAGE_DIMENSION, MAX_IMAGE_DIMENSION), quality: int = JPEG_QUALITY) -> bytes:
     """压缩图片，控制大小和分辨率。"""
     try:
         img = Image.open(io.BytesIO(content))
@@ -33,7 +36,7 @@ def compress_image(content: bytes, max_size: tuple = (1600, 1600), quality: int 
         if img.mode in ("RGBA", "P"):
             img = img.convert("RGB")
 
-        # 等比缩放
+        # 等比缩放，保持较高分辨率以识别手写文字
         img.thumbnail(max_size, Image.Resampling.LANCZOS)
 
         output = io.BytesIO()
@@ -62,6 +65,17 @@ def save_upload_file(file: UploadFile) -> str:
 
     # 返回相对于项目根目录的路径
     return str(file_path.relative_to(PROJECT_ROOT))
+
+
+def save_upload_files(files: list[UploadFile]) -> list[str]:
+    """保存多张上传图片，返回路径列表。"""
+    if len(files) > MAX_UPLOAD_FILES:
+        raise HTTPException(status_code=400, detail=f"一次最多上传 {MAX_UPLOAD_FILES} 张图片")
+
+    paths = []
+    for file in files:
+        paths.append(save_upload_file(file))
+    return paths
 
 
 def image_to_base64(file_path: str) -> str:

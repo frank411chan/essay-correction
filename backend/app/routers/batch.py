@@ -16,7 +16,7 @@ router = APIRouter(prefix="/api/batch", tags=["batch"])
 async def scan_batch(
     date: str = Query(..., description="日期，格式 YYYYMMDD"),
     ocr_engine: str = Query("kimi"),
-    genre: str = Query("narrative"),
+    genre: Optional[str] = Query(None, description="文体模板，不填则不使用文体规则"),
     auto_correct: bool = Query(True, description="是否扫描后自动批改"),
 ):
     """扫描指定日期目录中的作文图片。"""
@@ -32,7 +32,7 @@ async def scan_batch(
 @router.post("/today", response_model=BatchTaskResponse)
 async def scan_today(
     ocr_engine: str = Query("kimi"),
-    genre: str = Query("narrative"),
+    genre: Optional[str] = Query(None, description="文体模板，不填则不使用文体规则"),
     auto_correct: bool = Query(True),
 ):
     """扫描当天目录。"""

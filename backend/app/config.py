@@ -12,6 +12,11 @@ class Settings(BaseSettings):
     moonshot_base_url: str = "https://api.moonshot.cn/v1"
     moonshot_model: str = "moonshot-v1-32k-vision-preview"
 
+    # DeepSeek 配置（用于双评机制）
+    deepseek_api_key: str = ""
+    deepseek_base_url: str = "https://api.deepseek.com/v1"
+    deepseek_model: str = "deepseek-chat"
+
     database_url: str = "sqlite:///./essay_correction.db"
     upload_dir: str = "./uploads"
 

@@ -5,7 +5,7 @@ import re
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 from sqlalchemy.orm import Session
 
@@ -21,12 +21,22 @@ settings = get_settings()
 
 
 def _parse_filename(filename: str) -> tuple:
-    """解析文件名：人名_作文题目.jpg"""
+    """解析文件名：人名_作文题目_序号.jpg 或 人名_作文题目.jpg
+
+    返回：(姓名, 作文题目, 序号)
+    """
     stem = Path(filename).stem
-    match = re.match(r"^([^_-]+)[_-](.+)$", stem)
+    # 先尝试匹配 姓名_题目_序号
+    match = re.match(r"^([^_]+)_(.+?)_(\d+)$", stem)
     if match:
-        return match.group(1).strip(), match.group(2).strip()
-    return stem.strip(), "未命名作文"
+        return match.group(1).strip(), match.group(2).strip(), int(match.group(3))
+
+    # 再尝试匹配 姓名_题目
+    match = re.match(r"^([^_]+)_(.+)$", stem)
+    if match:
+        return match.group(1).strip(), match.group(2).strip(), 1
+
+    return stem.strip(), "未命名作文", 1
 
 
 def _get_or_create_student(db: Session, name: str) -> Student:
@@ -82,7 +92,11 @@ async def _do_batch_correct(task_id: str, essay_ids: List[int]):
                 db.commit()
 
                 ocr_provider = get_ocr_provider(essay.ocr_engine)
-                ocr_result = await ocr_provider.recognize(essay.image_path)
+                image_paths = essay.image_paths if essay.image_paths else [essay.image_path]
+                if len(image_paths) > 1:
+                    ocr_result = await ocr_provider.recognize_multiple(image_paths)
+                else:
+                    ocr_result = await ocr_provider.recognize(image_paths[0])
                 recognized_text = ocr_result.text
 
                 if ocr_result.words:
@@ -102,11 +116,22 @@ async def _do_batch_correct(task_id: str, essay_ids: List[int]):
                 essay.status = "done"
                 essay.recognized_text = result.get("recognized_text")
                 essay.total_score = result.get("total_score")
+                essay.shenzhen_score = result.get("shenzhen_score")
+                essay.shenzhen_level = result.get("shenzhen_level")
+                essay.shenzhen_score_first = result.get("shenzhen_score_first")
+                essay.shenzhen_score_second = result.get("shenzhen_score_second")
+                essay.shenzhen_score_third = result.get("shenzhen_score_third")
                 essay.dimension_scores = result.get("dimension_scores")
                 essay.comments = result.get("comments")
                 essay.paragraph_comments = result.get("paragraph_comments")
                 essay.suggestions = result.get("suggestions")
                 essay.corrected_sentences = result.get("corrected_sentences")
+                essay.topic_analysis = result.get("topic_analysis")
+                essay.general_requirements = result.get("general_requirements")
+                essay.paragraph_reviews = result.get("paragraph_reviews")
+                essay.highlights = result.get("highlights")
+                essay.deep_diagnosis = result.get("deep_diagnosis")
+                essay.writing_improvement = result.get("writing_improvement")
                 essay.error_message = None
                 db.commit()
 
@@ -130,7 +155,7 @@ async def _do_batch_correct(task_id: str, essay_ids: List[int]):
 async def scan_directory(
     date: str,
     ocr_engine: str = "kimi",
-    genre: str = "narrative",
+    genre: Optional[str] = None,
     auto_correct: bool = True,
 ) -> dict:
     """扫描指定日期目录中的作文图片。"""
@@ -143,19 +168,34 @@ async def scan_directory(
     if not image_files:
         raise FileNotFoundError("该目录下没有图片文件")
 
+    # 按姓名_题目分组，组内按序号排序
+    groups: dict[tuple[str, str], list[tuple[int, Path]]] = {}
+    for image_file in image_files:
+        try:
+            student_name, title, seq = _parse_filename(image_file.name)
+            groups.setdefault((student_name, title), []).append((seq, image_file))
+        except Exception as e:
+            print(f"解析文件名 {image_file.name} 失败: {e}")
+            continue
+
+    # 每组按序号排序，最多取3张
+    for key in groups:
+        groups[key].sort(key=lambda x: x[0])
+        groups[key] = groups[key][:3]
+
     db = SessionLocal()
     try:
         essay_ids = []
-        for image_file in image_files:
+        for (student_name, title), items in groups.items():
             try:
-                student_name, title = _parse_filename(image_file.name)
                 student = _get_or_create_student(db, student_name)
-                image_path = _copy_image_to_uploads(image_file)
+                image_paths = [_copy_image_to_uploads(item[1]) for item in items]
 
                 essay = Essay(
                     title=title,
                     grade=student.grade or "初中",
-                    image_path=image_path,
+                    image_path=image_paths[0],
+                    image_paths=image_paths,
                     student_id=student.id,
                     student_name=student.name,
                     ocr_engine=ocr_engine,
@@ -168,7 +208,7 @@ async def scan_directory(
                 db.refresh(essay)
                 essay_ids.append(essay.id)
             except Exception as e:
-                print(f"处理文件 {image_file.name} 失败: {e}")
+                print(f"处理文件组 {student_name}_{title} 失败: {e}")
                 continue
 
         task_id = task_manager.create_task(0)
@@ -200,4 +240,4 @@ async def scan_directory(
 async def scan_today_directory() -> dict:
     """扫描当天目录。"""
     today = datetime.now().strftime("%Y%m%d")
-    return await scan_directory(today, "kimi", "narrative", True)
+    return await scan_directory(today, "kimi", None, True)

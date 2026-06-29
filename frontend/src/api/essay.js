@@ -19,6 +19,14 @@ export function correctEssay(id) {
   return api.post(`/essays/${id}/correct`)
 }
 
+export function updateRecognizedText(id, recognizedText) {
+  return api.put(`/essays/${id}/recognized-text`, { recognized_text: recognizedText })
+}
+
+export function reCorrectEssay(id) {
+  return api.post(`/essays/${id}/re-correct`)
+}
+
 export function getEssayStatus(id) {
   return api.get(`/essays/${id}/status`)
 }
@@ -27,8 +35,8 @@ export function getEssay(id) {
   return api.get(`/essays/${id}`)
 }
 
-export function getEssayImageUrl(id) {
-  return `/api/essays/${id}/image`
+export function getEssayImageUrl(id, index = 0) {
+  return `/api/essays/${id}/image?index=${index}`
 }
 
 export function getEssayAnnotatedImageUrl(id) {

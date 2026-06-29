@@ -25,3 +25,18 @@ class OCRProvider(ABC):
     async def recognize(self, image_path: str) -> OcrResult:
         """识别图片中的文字，返回文本内容和位置信息。"""
         pass
+
+    async def recognize_multiple(self, image_paths: list[str]) -> OcrResult:
+        """识别多张图片中的文字，按顺序拼接成一篇文章。"""
+        if not image_paths:
+            return OcrResult(text="", words=[])
+
+        results = []
+        words = []
+        for path in image_paths:
+            result = await self.recognize(path)
+            results.append(result.text)
+            words.extend(result.words)
+
+        # 用换行拼接，保留各图片的段落结构
+        return OcrResult(text="\n".join(results), words=words)
