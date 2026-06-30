@@ -25,6 +25,65 @@ def split_paragraphs(text: str) -> List[str]:
     return paragraphs
 
 
+def _is_title(para: str) -> bool:
+    """判断第一段是否为标题。
+
+    规则：
+    1. 明确以“题目/标题/作文题目”开头；
+    2. 或段落很短（<=30 字）；
+    3. 或段落较短（<=50 字）且不以句末标点结尾。
+    """
+    p = para.strip()
+    if p.startswith("题目") or p.startswith("标题") or p.startswith("作文题目"):
+        return True
+    if len(p) <= 30:
+        return True
+    if len(p) <= 50 and not p[-1] in "。！？；":
+        return True
+    return False
+
+
+def group_paragraphs(paragraphs: List[str], min_chars: int = 100) -> List[dict]:
+    """将短段落与后续段落合并，直到总字数达到 min_chars。
+
+    会自动跳过以“题目/标题”开头的标题段，正文段落重新从 1 开始编号。
+    返回每个分组的 dict：
+    {
+        "start": 起始段落编号（从1开始，不含标题）,
+        "end": 结束段落编号,
+        "texts": [段落1原文, 段落2原文, ...],
+        "combined": 合并后的文本（保留段落间的换行）
+    }
+    """
+    if not paragraphs:
+        return []
+
+    # 如果第一段是标题，则跳过
+    start_offset = 1 if _is_title(paragraphs[0]) else 0
+    body_paragraphs = paragraphs[start_offset:]
+
+    if not body_paragraphs:
+        return []
+
+    groups = []
+    current_group = {"texts": [], "start": 1}
+    current_chars = 0
+
+    for idx, para in enumerate(body_paragraphs, start=1):
+        current_group["texts"].append(para)
+        current_chars += len(para)
+
+        # 最后一段必须收尾；非最后段且字数达标则切分
+        if idx == len(body_paragraphs) or current_chars >= min_chars:
+            current_group["end"] = idx
+            current_group["combined"] = "\n".join(current_group["texts"])
+            groups.append(current_group)
+            current_group = {"texts": [], "start": idx + 1}
+            current_chars = 0
+
+    return groups
+
+
 GENRE_TEMPLATES = {
     "narrative": {
         "name": "记叙文",
@@ -171,9 +230,17 @@ def build_correction_prompt(
 """
 
     paragraphs = split_paragraphs(recognized_text)
-    paragraph_mapping = "\n".join(
-        [f"第 {i + 1} 段：{p[:60]}{'...' if len(p) > 60 else ''}" for i, p in enumerate(paragraphs)]
-    ) if paragraphs else "（未识别到段落）"
+    groups = group_paragraphs(paragraphs, min_chars=100)
+
+    if groups:
+        paragraph_mapping_lines = []
+        for g in groups:
+            label = f"第 {g['start']} 段" if g["start"] == g["end"] else f"第 {g['start']}-{g['end']} 段"
+            preview = g["combined"][:80] + "..." if len(g["combined"]) > 80 else g["combined"]
+            paragraph_mapping_lines.append(f"{label}：{preview}")
+        paragraph_mapping = "\n".join(paragraph_mapping_lines)
+    else:
+        paragraph_mapping = "（未识别到段落）"
 
     return f"""你是一位经验丰富、熟悉深圳中考阅卷标准的语文教师。请对以下学生作文按照深圳中考作文批改标准进行专业批改。
 
@@ -190,7 +257,7 @@ def build_correction_prompt(
 ===
 
 【段落划分】
-请严格按照以下已划分好的段落进行精细化批改，不要合并或拆分段落：
+请严格按照以下已划分好的段落组进行精细化批改。每个“段”或“段组”作为整体给出一条 review，不要自行合并或拆分：
 {paragraph_mapping}
 
 请严格按照以下 JSON 格式返回，不要包含任何其他内容：
@@ -207,8 +274,8 @@ def build_correction_prompt(
   }},
   "comments": {{
     "overall": "总体评语",
-    "strengths": ["优点1", "优点2"],
-    "weaknesses": ["不足1", "不足2"]
+    "strengths": ["优点1：必须结合原文具体内容，不能空泛", "优点2：指出文中具体词句或段落好在哪里"],
+    "weaknesses": ["不足1：必须指出原文具体哪里不好，给出具体位置或例子", "不足2：说明对得分造成什么影响"]
   }},
   "paragraph_comments": [
     {{
@@ -237,9 +304,8 @@ def build_correction_prompt(
   "general_requirements": "本次批改依据的通用要求概述（100字左右）",
   "paragraph_reviews": [
     {{
-      "paragraph_index": 1,
-      "original": "该段原文",
-      "comment": "对该段的批改意见",
+      "paragraph_index": "1",
+      "comment": "对该段/段组的批改意见",
       "typos": [
         {{"wrong": "错字", "correct": "正字"}}
       ],
@@ -269,8 +335,11 @@ def build_correction_prompt(
 - 字数判定：请根据 recognized_text 估算字数（不含标题），并按深圳标准扣减 shenzhen_score。
 - 错别字：请逐字逐句检查，每个错别字在 typos 中列出，但 shenzhen_score 中最多扣 3 分。
 - 套作/抄袭嫌疑：如发现明显套作、抄袭，shenzhen_score 直接降至 25 分以下，并在 comments 中说明。
-- paragraph_reviews 必须严格按照【段落划分】中的段落顺序列出，段落数量必须与【段落划分】一致，每个段落生成一条 review。original 字段只需摘录该段开头 10–20 字，不要复制整段原文。
+- paragraph_reviews 必须严格按照【段落划分】中的段落组顺序列出，组数量必须与【段落划分】一致。paragraph_index 字段用"1"、"2"、"3-4"这样的格式表示第几段或哪几段合并；只需返回 paragraph_index 和 comment（以及该组内的 typos 和 sentence_corrections），original 字段由系统根据原文自动填充。
 - typos 中的 wrong 和 correct 尽量为单个汉字或词语；请认真检查形近字、音近字、漏字、多字。
+- comments.strengths 和 comments.weaknesses 必须结合原文具体内容，严禁"结构完整""语言流畅""中心明确""详略得当"等套话。每条优点必须引用原文具体句子并说明好在哪里；每条不足必须指出具体段落/句子的问题、引用原文，并说明对得分的影响。
+- highlights 必须列出 2–4 条结合原文的具体亮点，每条都要引用原文词句或说明具体写法（如"第X段'……'一句运用了比喻"），不能空泛。
+- deep_diagnosis.problem 必须一针见血指出最影响得分的 1 个核心问题，必须引用原文具体句子或段落作为例证；cause 要深入分析学生为什么会出现这个问题（是观察不细、词汇贫乏、还是构思仓促等）；suggestion 要给出至少 1 条可操作的改进方法，并最好结合本文给出示范。
 - suggestions 必须给出 2–3 条最重要的、具体可落地的修改建议。每条建议必须包含：problem（问题，一句话概括）、advice（具体修改方向，说明补什么细节或怎么改，不少于 30 字）、original（需要修改的原文片段，30–80 字，必须真实出自原文）、suggested（你修改后的完整片段，30–80 字，要自然流畅，可直接替换原文）。要像教师面批一样：先指出具体问题，再告诉学生补哪些细节，最后给出一段可以直接替换进原文的改写示例。
 - 请保持输出简洁：comments.overall 200 字以内，paragraph_reviews 每段评论 80 字以内，suggestions 每条 advice 30–80 字。
 - 请根据作文实际质量严格评分，不能千篇一律。

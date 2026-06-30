@@ -2,7 +2,7 @@
   <div class="paragraph-review">
     <!-- 左侧：原文 -->
     <div class="review-left">
-      <div class="paragraph-index">第 {{ review.paragraph_index }} 段</div>
+      <div class="paragraph-index">{{ paragraphLabel }}</div>
       <div class="original-text">
         <template v-if="hasTypos">
           <span
@@ -17,7 +17,13 @@
             <template v-else>{{ part.text }}</template>
           </span>
         </template>
-        <template v-else>{{ review.original || '（本段无原文）' }}</template>
+        <template v-else>
+          <div
+            v-for="(para, idx) in originalParagraphs"
+            :key="idx"
+            class="original-paragraph"
+          >{{ para || '（本段无原文）' }}</div>
+        </template>
       </div>
     </div>
 
@@ -67,6 +73,20 @@ const props = defineProps({
 
 const hasTypos = computed(() => {
   return (props.review.typos || []).length > 0
+})
+
+const paragraphLabel = computed(() => {
+  const idx = String(props.review.paragraph_index || '')
+  if (idx.includes('-')) {
+    return `第 ${idx} 段（合并段）`
+  }
+  return `第 ${idx} 段`
+})
+
+// 合并段用 ||| 分隔各段原文，展示时保留段落结构
+const originalParagraphs = computed(() => {
+  const original = props.review.original || ''
+  return original.split('|||').map(p => p.trim()).filter(Boolean)
 })
 
 // 将原文按错字拆分，用于行内标注
@@ -141,6 +161,18 @@ const renderedOriginal = computed(() => {
   font-size: 15px;
   color: #303133;
   white-space: pre-wrap;
+}
+
+.original-paragraph {
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px dashed #e4e7ed;
+}
+
+.original-paragraph:last-child {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
 }
 
 .comment {

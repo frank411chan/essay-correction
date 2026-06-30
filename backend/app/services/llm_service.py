@@ -6,7 +6,12 @@ from typing import Optional
 from openai import OpenAI
 
 from app.config import get_settings
-from app.services.prompts import build_correction_prompt, build_topic_analysis_prompt
+from app.services.prompts import (
+    build_correction_prompt,
+    build_topic_analysis_prompt,
+    split_paragraphs,
+    group_paragraphs,
+)
 
 settings = get_settings()
 
@@ -110,6 +115,30 @@ def _normalize_score(score) -> int:
         return 0
 
 
+def _fill_paragraph_reviews(result: dict, original_text: str) -> None:
+    """根据实际段落组，重新对齐 paragraph_reviews 的 index 和 original。"""
+    paragraphs = split_paragraphs(original_text)
+    groups = group_paragraphs(paragraphs, min_chars=100)
+
+    if not groups:
+        result["paragraph_reviews"] = []
+        return
+
+    reviews = result.get("paragraph_reviews") or []
+
+    # 按顺序对齐：第 i 条 review 对第 i 个 group
+    filled = []
+    for i, group in enumerate(groups):
+        review = reviews[i] if i < len(reviews) else {}
+        label = f"{group['start']}" if group["start"] == group["end"] else f"{group['start']}-{group['end']}"
+        review["paragraph_index"] = label
+        # 用 ||| 分隔合并组内的各段原文，保留段落结构
+        review["original"] = "|||".join(group["texts"])
+        filled.append(review)
+
+    result["paragraph_reviews"] = filled
+
+
 def normalize_result(result: dict, original_text: str) -> dict:
     """规范化批改结果，填充默认值，并确保 recognized_text 为原始 OCR 文本。"""
     # 强制使用原始识别文本，避免模型在 JSON 中生成非法字符串
@@ -145,6 +174,9 @@ def normalize_result(result: dict, original_text: str) -> dict:
 
     # 修正档位与分数不一致的情况（兜底）
     result["shenzhen_level"] = _score_to_level(result["shenzhen_score"])
+
+    # 确保 paragraph_reviews 与实际段落组对齐
+    _fill_paragraph_reviews(result, original_text)
 
     return result
 

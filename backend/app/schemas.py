@@ -45,7 +45,7 @@ class SentenceCorrection(BaseModel):
 
 
 class ParagraphReview(BaseModel):
-    paragraph_index: int
+    paragraph_index: str
     original: str
     comment: str
     typos: List[TypoItem] = Field(default_factory=list)
